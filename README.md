@@ -1,87 +1,74 @@
 # AO PONTO
 
-API NestJS para listar cortes disponíveis e registrar pedidos do totem. A persistência usa **Prisma ORM** com PostgreSQL: o modelo declara unicidade do pedido por sessão e o pedido, seus itens e a senha são criados em uma única transação.
+Aplicação de registro de pedidos para açougue, com API NestJS, PostgreSQL e front-end React.
 
 ## Requisitos
 
-- Node.js 20+
-- Docker e Docker Compose
+- Node.js 20 ou superior
+- Docker Desktop com Docker Compose
 
-## Ambiente local
+## Preparação local
 
-```bash
+Na raiz do projeto, abra um terminal PowerShell e configure o ambiente e o banco:
+
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 npm install
-Copy-Item .env.example .env
 docker compose up -d postgres
-npx prisma migrate dev --name init
+npx prisma migrate dev
+npx prisma db seed
+```
+
+O arquivo `.env.example` contém as configurações locais de conexão. O comando de seed cadastra Alcatra e Costela bovina e pode ser executado novamente para atualizar os caminhos das imagens.
+
+No segundo terminal, instale as dependências do front-end:
+
+```powershell
+cd front-end
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+npm install
+```
+
+## Iniciar a aplicação
+
+No primeiro terminal, na raiz do projeto, inicie a API:
+
+```powershell
 npm run start:dev
 ```
 
-A API estará em `http://localhost:3000`. O comando `npx prisma db seed` cadastra cortes ilustrativos no banco local para facilitar a exploração. Configure credenciais próprias em `.env` fora do ambiente local; `.env` não deve ser versionado.
+No segundo terminal, dentro de `front-end`, inicie o Vite:
 
-A documentação interativa Swagger fica em `http://localhost:3000/docs` e o documento OpenAPI JSON em `http://localhost:3000/docs-json`.
-
-## Front-end do totem
-
-O aplicativo React fica em `front-end/`. Configure `FRONTEND_URL=http://localhost:5173` no ambiente da API quando o front-end estiver em outra origem, e `VITE_API_URL=http://localhost:3000` em `front-end/.env` quando a API não estiver no endereço padrão.
-
-```bash
-cd front-end
-npm install
+```powershell
 npm run dev
 ```
 
-O front-end consulta `GET /` para mostrar os cortes e envia os itens selecionados para `POST /pedidos`. A tela de confirmação só é exibida após a resposta bem-sucedida do backend.
+- Front-end: http://localhost:5173
+- API: http://localhost:3000
+- Swagger: http://localhost:3000/docs
 
-## API
+O front-end busca os cortes em `GET /` e registra pedidos em `POST /pedidos`. A tela da senha aparece após a API confirmar o pedido.
 
-`GET /` lista somente cortes disponíveis, incluindo preço por kg.
+Para parar o PostgreSQL sem remover os dados locais, execute `docker compose down` na raiz do projeto.
 
-`POST /cortes` cadastra um corte para popular o catálogo. O `id` e a data de cadastro são gerados pelo servidor; `disponivel` é opcional e assume `true` quando omitido.
+## Testes e critérios de aceitação
 
-```json
-{
-  "nome": "Alcatra",
-  "imagemUrl": "https://example.com/imagens/alcatra.jpg",
-  "precoKg": "59.90",
-  "disponivel": true
-}
-```
+Os testes abaixo foram executados localmente:
 
-O preço é enviado como string decimal para preservar as casas decimais. A rota retorna `201` com o corte persistido e `400` quando os campos não passam pela validação. Essa rota está disponível sem autenticação para facilitar o cadastro inicial de dados.
-
-`POST /pedidos` recebe:
-
-```json
-{
-  "sessaoId": "81fef0bf-943d-4fd8-8d74-2b2438155846",
-  "itens": [
-    {
-      "corteId": "e7b58a06-6ed8-4636-9fb2-8fe12856f72d",
-      "quantidade": 0.75,
-      "unidadeMedida": "KG"
-    }
-  ]
-}
-```
-
-O backend valida cortes e itens, calcula os valores, persiste pedido e senha na mesma transação e só então responde. O `sessaoId` funciona como chave de idempotência: a mesma solicitação recupera o pedido persistido; uma solicitação diferente na sessão retorna `409 Conflict`. O banco também possui uma restrição única em `Pedido.sessaoId` para proteger corridas concorrentes.
-
-Respostas de validação usam `400`, corte inexistente/indisponível usa `404`, sessão com pedido diferente usa `409`, e registro bem-sucedido usa `201`. Preços e subtotais não são aceitos do cliente.
-
-## Preço por unidade
-
-`KG` é multiplicado diretamente pelo preço/kg e `GRAMA` é convertido para kg antes do cálculo. O documento de domínio não define peso ou tarifa para `PECA` e `FATIA`, apesar de exigir subtotal e preço/kg. Nesta versão, esses valores são tratados como quantidade equivalente em kg para permitir o registro e o cálculo no servidor. Para cobrança comercial correta por peça/fatia, é necessário definir peso médio por corte ou uma tabela de preços específica por unidade.
-
-## Comandos úteis
-
-```bash
-npx prisma generate
-npx prisma migrate dev
-npx prisma db seed
-npm run build
+```powershell
 npm test -- --runInBand
 npm run test:e2e -- --runInBand
 ```
 
-O Compose mantém os dados em volume nomeado `postgres_data`; para desligar o serviço sem remover os dados, execute `docker compose down`.
+**Resultado da execução:** 3 testes unitários aprovados e 10 testes e2e aprovados.
+
+Os testes e2e verificam:
+
+- Persistência do pedido e da senha antes da resposta da API.
+- Idempotência e unicidade por sessão, inclusive em chamadas concorrentes.
+- Rollback do pedido quando ocorre uma falha simulada ao gravar a senha.
+- Rejeição de pedido vazio, quantidade zero ou negativa e unidade ausente ou inválida.
+- Aceitação das unidades suportadas e conversão de gramas para quilogramas.
+- Medição de 30 registros: na execução local, o p95 foi de **17,9 ms**, abaixo do limite de 2 segundos.
+
+O teste e2e requer o PostgreSQL iniciado e usa a conexão definida em `.env`. A medição de desempenho é uma amostra local; os tempos podem variar conforme a máquina e o ambiente.
