@@ -10,6 +10,7 @@ describe('US01 /pedidos (e2e; PostgreSQL required)', () => {
   let prisma: PrismaService;
   const corteId = '2d74707c-fbf2-49ad-8b5f-cf4c29c86bc7';
   const sessionIds: string[] = [];
+  const additionalCutIds: string[] = [];
   const newSession = () => {
     const id = crypto.randomUUID();
     sessionIds.push(id);
@@ -229,6 +230,33 @@ describe('US01 /pedidos (e2e; PostgreSQL required)', () => {
     );
   });
 
+  it('creates a cut with a localhost image URL', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/cortes')
+      .send({
+        nome: 'Picanha do Lula',
+        imagemUrl: 'http://localhost:5173/imgs/lula.jpg',
+        precoKg: '50.00',
+        disponivel: true,
+      })
+      .expect(201);
+
+    const corte = response.body as {
+      id: string;
+      nome: string;
+      imagemUrl: string;
+      precoKg: string;
+      disponivel: boolean;
+    };
+    additionalCutIds.push(corte.id);
+    expect(corte).toMatchObject({
+      nome: 'Picanha do Lula',
+      imagemUrl: 'http://localhost:5173/imgs/lula.jpg',
+      precoKg: '50',
+      disponivel: true,
+    });
+  });
+
   it('rejects unavailable cuts without confirming an order', async () => {
     const sessaoId = newSession();
     await prisma.corte.update({
@@ -269,6 +297,151 @@ describe('US01 /pedidos (e2e; PostgreSQL required)', () => {
     expect(await prisma.pedido.count({ where: { sessaoId } })).toBe(0);
   });
 
+  it('prioritizes the most requested cut and advances the next call on completion', async () => {
+    const corteMaisPedido = crypto.randomUUID();
+    const corteMenosPedido = crypto.randomUUID();
+    additionalCutIds.push(corteMaisPedido, corteMenosPedido);
+    await prisma.corte.createMany({
+      data: [
+        {
+          id: corteMaisPedido,
+          nome: 'Corte prioritário de teste',
+          imagemUrl: 'https://example.test/prioritario.png',
+          precoKg: '20.00',
+        },
+        {
+          id: corteMenosPedido,
+          nome: 'Corte secundário de teste',
+          imagemUrl: 'https://example.test/secundario.png',
+          precoKg: '30.00',
+        },
+      ],
+    });
+
+    const pedidosMaisDemandados: string[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      const sessaoId = newSession();
+      const response = await request(app.getHttpServer())
+        .post('/pedidos')
+        .send({
+          sessaoId,
+          itens: [
+            { corteId: corteMaisPedido, quantidade: 1, unidadeMedida: 'KG' },
+          ],
+        })
+        .expect(201);
+      pedidosMaisDemandados.push((response.body as { id: string }).id);
+      await new Promise((resolve) => setTimeout(resolve, 3));
+    }
+    const pedidoMenosDemandado = await request(app.getHttpServer())
+      .post('/pedidos')
+      .send({
+        sessaoId: newSession(),
+        itens: [
+          { corteId: corteMenosPedido, quantidade: 1, unidadeMedida: 'KG' },
+        ],
+      })
+      .expect(201);
+    const pedidoMenosDemandadoId = (pedidoMenosDemandado.body as { id: string })
+      .id;
+
+    const fila = await request(app.getHttpServer())
+      .get('/atendimento/fila')
+      .expect(200);
+    const idsOrdenados = (
+      fila.body as { pendentes: { pedidoId: string }[] }
+    ).pendentes.map((ticket) => ticket.pedidoId);
+    expect(idsOrdenados.indexOf(pedidosMaisDemandados[0])).toBeLessThan(
+      idsOrdenados.indexOf(pedidosMaisDemandados[1]),
+    );
+    expect(idsOrdenados.indexOf(pedidosMaisDemandados[1])).toBeLessThan(
+      idsOrdenados.indexOf(pedidoMenosDemandadoId),
+    );
+
+    const filaAtual = fila.body as {
+      emAtendimento: { id: string; pedidoId: string } | null;
+    };
+    if (filaAtual.emAtendimento) {
+      await request(app.getHttpServer())
+        .post('/atendimento/chamar-proxima')
+        .expect(409);
+      expect(
+        await prisma.senhaAtendimento.findUnique({
+          where: { id: filaAtual.emAtendimento.id },
+        }),
+      ).toMatchObject({
+        pedidoId: filaAtual.emAtendimento.pedidoId,
+        status: 'CHAMADA',
+      });
+      return;
+    }
+
+    const chamada = await request(app.getHttpServer())
+      .post('/atendimento/chamar-proxima')
+      .expect(201);
+    const pedidoEmAtendimento = (
+      chamada.body as {
+        senha: { pedidoId: string; quantidadeChamadas: number };
+      }
+    ).senha;
+    expect(pedidoEmAtendimento).toBeDefined();
+    expect(pedidoEmAtendimento.quantidadeChamadas).toBe(1);
+
+    const filaComChamada = await request(app.getHttpServer())
+      .get('/atendimento/fila')
+      .expect(200);
+    const pedidoPendente = (
+      filaComChamada.body as { pendentes: { pedidoId: string }[] }
+    ).pendentes[0];
+    expect(pedidoPendente).toBeDefined();
+    await request(app.getHttpServer())
+      .patch(`/atendimento/pedidos/${pedidoPendente.pedidoId}/concluir`)
+      .expect(409);
+    expect(
+      await prisma.senhaAtendimento.findUnique({
+        where: { pedidoId: pedidoPendente.pedidoId },
+      }),
+    ).toMatchObject({ status: 'PENDENTE' });
+
+    await request(app.getHttpServer())
+      .post(`/atendimento/pedidos/${pedidoEmAtendimento.pedidoId}/rechamar`)
+      .expect(201);
+    const painel = await request(app.getHttpServer())
+      .get('/atendimento/painel')
+      .expect(200);
+    expect(
+      (painel.body as { senhaAtual: { numeroReemissoes: number } }).senhaAtual
+        .numeroReemissoes,
+    ).toBe(1);
+
+    const conclusao = await request(app.getHttpServer())
+      .patch(`/atendimento/pedidos/${pedidoEmAtendimento.pedidoId}/concluir`)
+      .expect(200);
+    expect(
+      (conclusao.body as { concluida: { status: string } }).concluida.status,
+    ).toBe('FINALIZADA');
+    expect(
+      (conclusao.body as { concluida: { pedidoId: string } }).concluida
+        .pedidoId,
+    ).toBe(pedidoEmAtendimento.pedidoId);
+    expect(
+      await prisma.senhaAtendimento.findUnique({
+        where: { pedidoId: pedidoPendente.pedidoId },
+      }),
+    ).toMatchObject({ status: 'PENDENTE' });
+    const chamadaManual = await request(app.getHttpServer())
+      .post('/atendimento/chamar-proxima')
+      .expect(201);
+    expect(
+      (chamadaManual.body as { senha: { pedidoId: string } }).senha.pedidoId,
+    ).toBe(pedidoPendente.pedidoId);
+    expect(
+      await prisma.pedido.findUnique({
+        where: { id: pedidoEmAtendimento.pedidoId },
+      }),
+    ).toMatchObject({ status: 'CONCLUIDO' });
+  });
+
   afterAll(async () => {
     if (prisma) {
       await prisma.itemPedido.deleteMany({ where: { corteId } });
@@ -284,6 +457,9 @@ describe('US01 /pedidos (e2e; PostgreSQL required)', () => {
       await prisma.corte
         .delete({ where: { id: corteId } })
         .catch(() => undefined);
+      await prisma.corte.deleteMany({
+        where: { id: { in: additionalCutIds } },
+      });
     }
     if (app) await app.close();
   });

@@ -84,4 +84,15 @@ model SenhaAtendimento {
   ultimaChamada      DateTime?
   dataGeracao        DateTime    @default(now())
   pedido             Pedido      @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  chamadas           ChamadaSenha[]
+}
+
+model ChamadaSenha {
+  id          String           @id @default(uuid()) @db.Uuid
+  senhaId     String           @db.Uuid
+  dataChamada DateTime         @default(now())
+  reemissao   Boolean          @default(false)
+  senha       SenhaAtendimento @relation(fields: [senhaId], references: [id], onDelete: Cascade)
+
+  @@index([dataChamada])
 }

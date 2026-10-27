@@ -26,7 +26,7 @@ export class CriarCorteDto {
     example: 'https://example.com/imagens/alcatra.jpg',
   })
   @IsString()
-  @IsUrl({ require_protocol: true })
+  @IsUrl({ require_protocol: true, require_tld: false })
   @MaxLength(2048)
   imagemUrl: string;
 
