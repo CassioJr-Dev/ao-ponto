@@ -6,6 +6,7 @@ import type {
   TicketAtendimento,
   UnidadeMedida,
 } from '../types';
+import type { OfflineOrder, Reservation } from './offlineStore';
 
 const apiHost = window.location.hostname.includes(':')
   ? `[${window.location.hostname}]`
@@ -56,6 +57,22 @@ export const api = {
     request<PedidoResponse>('/pedidos', {
       method: 'POST',
       body: JSON.stringify({ sessaoId, itens }),
+    }),
+  reservarSenhas: (totemId: string, reservaId: string) =>
+    request<Omit<Reservation, 'nextNumber'>>('/pedidos/reservas-senhas', {
+      method: 'POST',
+      body: JSON.stringify({ totemId, reservaId }),
+    }),
+  sincronizarPedido: (order: OfflineOrder) =>
+    request<PedidoResponse>('/pedidos/sincronizar', {
+      method: 'POST',
+      body: JSON.stringify({
+        sessaoId: order.sessaoId,
+        totemId: order.totemId,
+        reservaId: order.reservaId,
+        numeroSequencial: order.numeroSequencial,
+        itens: order.itens,
+      }),
     }),
   criarCorte: (corte: {
     nome: string;

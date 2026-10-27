@@ -11,6 +11,8 @@ import {
 import { CriarPedidoDto } from './dto/criar-pedido.dto';
 import { PedidoResponseDto } from './dto/pedido-response.dto';
 import { PedidosService } from './pedidos.service';
+import { ReservarSenhasDto } from './dto/reservar-senhas.dto';
+import { SincronizarPedidoOfflineDto } from './dto/sincronizar-pedido-offline.dto';
 
 @Controller('pedidos')
 @ApiTags('Pedidos')
@@ -73,5 +75,21 @@ export class PedidosController {
   })
   criar(@Body() dto: CriarPedidoDto) {
     return this.pedidosService.criar(dto);
+  }
+
+  @Post('reservas-senhas')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Reservar um bloco de senhas para operação offline',
+  })
+  reservarSenhas(@Body() dto: ReservarSenhasDto) {
+    return this.pedidosService.reservarSenhas(dto.totemId, dto.reservaId);
+  }
+
+  @Post('sincronizar')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Sincronizar pedido criado com senha reservada' })
+  sincronizar(@Body() dto: SincronizarPedidoOfflineDto) {
+    return this.pedidosService.sincronizar(dto);
   }
 }

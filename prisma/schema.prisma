@@ -28,33 +28,33 @@ enum StatusSenha {
 }
 
 model Corte {
-  id          String       @id @default(uuid()) @db.Uuid
-  nome        String
-  imagemUrl   String
-  precoKg     Decimal      @db.Decimal(12, 2)
-  disponivel  Boolean      @default(true)
-  dataCadastro DateTime    @default(now())
-  itensPedido ItemPedido[]
+  id           String       @id @default(uuid()) @db.Uuid
+  nome         String
+  imagemUrl    String
+  precoKg      Decimal      @db.Decimal(12, 2)
+  disponivel   Boolean      @default(true)
+  dataCadastro DateTime     @default(now())
+  itensPedido  ItemPedido[]
 }
 
 model SessaoTotem {
-  id               String   @id @db.Uuid
-  dataInicio       DateTime @default(now())
+  id               String    @id @db.Uuid
+  dataInicio       DateTime  @default(now())
   dataFim          DateTime?
-  pedidoConfirmado Boolean  @default(false)
+  pedidoConfirmado Boolean   @default(false)
   pedido           Pedido?
 }
 
 model Pedido {
-  id            String          @id @default(uuid()) @db.Uuid
-  numeroPedido  Int             @unique @default(autoincrement())
-  sessaoId      String          @unique @db.Uuid
-  status        StatusPedido    @default(REGISTRADO)
-  presencial    Boolean         @default(true)
-  total         Decimal         @db.Decimal(12, 2)
-  dataCriacao   DateTime        @default(now())
+  id            String            @id @default(uuid()) @db.Uuid
+  numeroPedido  Int               @unique @default(autoincrement())
+  sessaoId      String            @unique @db.Uuid
+  status        StatusPedido      @default(REGISTRADO)
+  presencial    Boolean           @default(true)
+  total         Decimal           @db.Decimal(12, 2)
+  dataCriacao   DateTime          @default(now())
   dataConclusao DateTime?
-  sessao        SessaoTotem     @relation(fields: [sessaoId], references: [id], onDelete: Restrict)
+  sessao        SessaoTotem       @relation(fields: [sessaoId], references: [id], onDelete: Restrict)
   itensPedido   ItemPedido[]
   senha         SenhaAtendimento?
 
@@ -75,16 +75,30 @@ model ItemPedido {
 }
 
 model SenhaAtendimento {
-  id                 String      @id @default(uuid()) @db.Uuid
-  numeroSequencial   Int         @unique @default(autoincrement())
-  pedidoId           String      @unique @db.Uuid
-  status             StatusSenha @default(PENDENTE)
-  quantidadeChamadas Int         @default(0)
-  numeroReemissoes   Int         @default(0)
+  id                 String         @id @default(uuid()) @db.Uuid
+  numeroSequencial   Int            @unique @default(autoincrement())
+  pedidoId           String         @unique @db.Uuid
+  status             StatusSenha    @default(PENDENTE)
+  quantidadeChamadas Int            @default(0)
+  numeroReemissoes   Int            @default(0)
   ultimaChamada      DateTime?
-  dataGeracao        DateTime    @default(now())
-  pedido             Pedido      @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  dataGeracao        DateTime       @default(now())
+  reservaSenhaId     String?        @db.Uuid
+  pedido             Pedido         @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  reservaSenha       ReservaSenha?  @relation(fields: [reservaSenhaId], references: [id], onDelete: Restrict)
   chamadas           ChamadaSenha[]
+}
+
+model ReservaSenha {
+  id           String             @id @db.Uuid
+  totemId      String             @db.Uuid
+  numeroInicio Int
+  numeroFim    Int
+  catalogo     Json
+  dataReserva  DateTime           @default(now())
+  senhas       SenhaAtendimento[]
+
+  @@index([totemId, numeroInicio])
 }
 
 model ChamadaSenha {

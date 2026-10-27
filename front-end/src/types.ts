@@ -17,9 +17,10 @@ export interface ItemCarrinho {
 }
 
 export interface PedidoResponse {
-  numeroPedido: number;
+  numeroPedido?: number;
   total: string;
   senha: { numeroSequencial: number };
+  sincronizacaoPendente?: boolean;
 }
 
 export interface TicketAtendimento {

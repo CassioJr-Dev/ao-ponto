@@ -11,6 +11,7 @@ describe('US01 /pedidos (e2e; PostgreSQL required)', () => {
   const corteId = '2d74707c-fbf2-49ad-8b5f-cf4c29c86bc7';
   const sessionIds: string[] = [];
   const additionalCutIds: string[] = [];
+  const reservationIds: string[] = [];
   const newSession = () => {
     const id = crypto.randomUUID();
     sessionIds.push(id);
@@ -74,6 +75,99 @@ describe('US01 /pedidos (e2e; PostgreSQL required)', () => {
       .expect(201);
     expect((retry.body as { id: string }).id).toBe(responseBody.id);
     expect(await prisma.pedido.count({ where: { sessaoId } })).toBe(1);
+  });
+
+  it('reserves a ticket block and syncs offline orders with the reserved number and catalog price', async () => {
+    const sessaoId = newSession();
+    const totemId = crypto.randomUUID();
+    const reservaId = crypto.randomUUID();
+    reservationIds.push(reservaId);
+    const reservationResponse = await request(app.getHttpServer())
+      .post('/pedidos/reservas-senhas')
+      .send({ totemId, reservaId })
+      .expect(201);
+    const reservation = reservationResponse.body as {
+      numeroInicio: number;
+      numeroFim: number;
+      catalogo: { id: string; precoKg: string }[];
+    };
+    expect(reservation.numeroFim - reservation.numeroInicio + 1).toBe(
+      Number(process.env.OFFLINE_TICKET_BLOCK_SIZE ?? 50),
+    );
+    const reservationRetry = await request(app.getHttpServer())
+      .post('/pedidos/reservas-senhas')
+      .send({ totemId, reservaId })
+      .expect(201);
+    expect(reservationRetry.body.numeroInicio).toBe(reservation.numeroInicio);
+    expect(reservationRetry.body.numeroFim).toBe(reservation.numeroFim);
+    expect(reservation.catalogo).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: corteId, precoKg: '40' }),
+      ]),
+    );
+
+    await prisma.corte.update({
+      where: { id: corteId },
+      data: { precoKg: '99.00', disponivel: false },
+    });
+    const body = {
+      sessaoId,
+      totemId,
+      reservaId,
+      numeroSequencial: reservation.numeroInicio,
+      itens: [{ corteId, quantidade: 0.75, unidadeMedida: 'KG' }],
+    };
+    try {
+      const response = await request(app.getHttpServer())
+        .post('/pedidos/sincronizar')
+        .send(body)
+        .expect(201);
+      expect(response.body.senha.numeroSequencial).toBe(
+        reservation.numeroInicio,
+      );
+      expect(response.body.total).toBe('30');
+      expect(response.body.senha.reservaSenhaId).toBe(reservaId);
+
+      const retry = await request(app.getHttpServer())
+        .post('/pedidos/sincronizar')
+        .send(body)
+        .expect(201);
+      expect(retry.body.id).toBe(response.body.id);
+      expect(await prisma.pedido.count({ where: { sessaoId } })).toBe(1);
+    } finally {
+      await prisma.corte.update({
+        where: { id: corteId },
+        data: { precoKg: '40.00', disponivel: true },
+      });
+    }
+  });
+
+  it('rejects using a reserved ticket number for a second order', async () => {
+    const totemId = crypto.randomUUID();
+    const reservaId = crypto.randomUUID();
+    reservationIds.push(reservaId);
+    const reservationResponse = await request(app.getHttpServer())
+      .post('/pedidos/reservas-senhas')
+      .send({ totemId, reservaId })
+      .expect(201);
+    const numeroSequencial = (
+      reservationResponse.body as { numeroInicio: number }
+    ).numeroInicio;
+    const dto = (sessaoId: string) => ({
+      sessaoId,
+      totemId,
+      reservaId,
+      numeroSequencial,
+      itens: [{ corteId, quantidade: 1, unidadeMedida: 'KG' }],
+    });
+    await request(app.getHttpServer())
+      .post('/pedidos/sincronizar')
+      .send(dto(newSession()))
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/pedidos/sincronizar')
+      .send(dto(newSession()))
+      .expect(409);
   });
 
   it('rejects empty, zero quantity and missing/invalid measurement', async () => {
@@ -448,11 +542,19 @@ describe('US01 /pedidos (e2e; PostgreSQL required)', () => {
       await prisma.senhaAtendimento.deleteMany({
         where: { pedido: { sessaoId: { in: sessionIds } } },
       });
+      if (reservationIds.length) {
+        await prisma.senhaAtendimento.deleteMany({
+          where: { reservaSenhaId: { in: reservationIds } },
+        });
+      }
       await prisma.pedido.deleteMany({
         where: { sessaoId: { in: sessionIds } },
       });
       await prisma.sessaoTotem.deleteMany({
         where: { id: { in: sessionIds } },
+      });
+      await prisma.reservaSenha.deleteMany({
+        where: { id: { in: reservationIds } },
       });
       await prisma.corte
         .delete({ where: { id: corteId } })

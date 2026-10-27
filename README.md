@@ -52,7 +52,20 @@ O Vite também fica acessível pela rede local. Para abrir as telas em outro dis
 - Painel de senhas: http://localhost:5173/painel
 - Cadastro de cortes: http://localhost:5173/cortes/novo
 
-O front-end busca os cortes em `GET /` e registra pedidos em `POST /pedidos`. A tela da senha aparece após a API confirmar o pedido.
+O totem baixa os cortes e a reserva de senhas enquanto está conectado; pedidos novos são gravados localmente e sincronizados pela API. `POST /pedidos` continua disponível para clientes legados.
+
+## Operação offline do totem
+
+Ao iniciar conectado, o totem reserva um bloco de 50 números e guarda no IndexedDB o intervalo e uma cópia do catálogo com os preços. O navegador persiste cada pedido localmente antes de mostrar a senha. Sem conexão, usa a próxima senha do bloco e mantém o pedido na fila local. Ao voltar a conexão, o app reenvia a fila em ordem; a API valida o número reservado e a sessão idempotente antes de salvar o pedido no banco. O pedido aparece na fila de atendimento depois dessa sincronização.
+
+O tamanho pode ser ajustado por `OFFLINE_TICKET_BLOCK_SIZE` no ambiente da API. Os blocos não utilizados deixam lacunas na numeração, pois seus números ficam reservados para aquele totem. Se os números locais acabarem sem conexão, o app interrompe novos pedidos até conseguir reservar outro bloco. Os dados locais ficam no armazenamento do navegador; limpar os dados do site remove a cópia ainda não sincronizada.
+
+O cache para reabrir o app sem rede é instalado pelo service worker no build de produção. `localhost` é considerado contexto seguro pelo navegador. Para usar o totem por IP em outro dispositivo, sirva o front-end com HTTPS para que o navegador permita o uso offline.
+
+Rotas novas da API:
+
+- `POST /pedidos/reservas-senhas` — reserva idempotentemente um bloco para o totem.
+- `POST /pedidos/sincronizar` — confirma um pedido local usando a senha e o catálogo reservados.
 
 Na tela de atendimento, pedidos pendentes são agrupados pela maior quantidade de pedidos que contém cada corte; em caso de empate, os mais antigos aparecem primeiro. O atendente chama a próxima senha manualmente, pode reemitir a chamada atual e conclui o pedido em atendimento. Concluir um pedido não chama o próximo; o atendente deve acionar essa chamada manualmente. A tela de atendimento e o painel atualizam os dados a cada 3 segundos. O endpoint de dados do painel aceita somente conexões da rede local.
 
@@ -75,7 +88,7 @@ npm test -- --runInBand
 npm run test:e2e -- --runInBand
 ```
 
-**Validação recente:** 19 testes unitários e 12 testes e2e aprovados, incluindo o cadastro de cortes com imagem servida em `localhost`.
+**Validação recente:** 19 testes unitários e 14 testes e2e aprovados, incluindo reserva de senhas e sincronização idempotente com o preço do catálogo reservado.
 
 Os testes e2e verificam:
 
