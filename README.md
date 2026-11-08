@@ -50,9 +50,21 @@ O Vite também fica acessível pela rede local. Para abrir as telas em outro dis
 - Swagger: http://localhost:3000/docs
 - Tela de atendimento: http://localhost:5173/atendimento
 - Painel de senhas: http://localhost:5173/painel
+- Gerenciamento de cortes: http://localhost:5173/painel/cortes
 - Cadastro de cortes: http://localhost:5173/cortes/novo
 
 O totem baixa os cortes e a reserva de senhas enquanto está conectado; pedidos novos são gravados localmente e sincronizados pela API. `POST /pedidos` continua disponível para clientes legados.
+
+## Gerenciamento de cortes
+
+O painel em `/painel/cortes` lista os cortes disponíveis e indisponíveis e permite cadastrar, editar e excluir cortes. A API disponibiliza as seguintes rotas para o painel:
+
+- `GET /painel/cortes` — lista todos os cortes.
+- `POST /painel/cortes` — cadastra um corte.
+- `PATCH /painel/cortes/:id` — atualiza os campos enviados.
+- `DELETE /painel/cortes/:id` — exclui um corte que ainda não esteja associado a pedidos.
+
+`imagemUrl` é opcional. Pode receber uma URL HTTP/HTTPS ou um caminho de arquivo público do front-end, como `/imgs/alcatra.png` para `front-end/public/imgs/alcatra.png`. Deixar o campo vazio remove a imagem; o catálogo usa uma imagem de fallback.
 
 ## Operação offline do totem
 
