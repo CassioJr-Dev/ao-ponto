@@ -20,6 +20,7 @@ import { Footer } from './components/Footer';
 import { Atendimento } from './components/Atendimento';
 import { Painel } from './components/Painel';
 import { CriarCorte } from './components/CriarCorte';
+import { GerenciarCortes } from './components/GerenciarCortes';
 import { subtotal } from './utils';
 import './styles/operations.css';
 
@@ -346,6 +347,7 @@ export default function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
   if (path === '/atendimento') return <Atendimento />;
   if (path === '/painel') return <Painel />;
+  if (path === '/painel/cortes') return <GerenciarCortes />;
   if (path === '/cortes/novo') return <CriarCorte />;
   return <TotemApp />;
 }

@@ -95,14 +95,13 @@ export function CriarCorte() {
             </label>
 
             <label>
-              URL da imagem
+              URL da imagem (opcional)
               <input
-                type="url"
+                type="text"
                 value={imagemUrl}
                 onChange={(event) => setImagemUrl(event.target.value)}
                 maxLength={2048}
-                placeholder="https://exemplo.com/imagens/corte.jpg"
-                required
+                placeholder="/imgs/alcatra.png ou https://exemplo.com/imagem.jpg"
               />
             </label>
 

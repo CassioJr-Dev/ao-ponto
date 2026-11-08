@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { CriarCorteDto } from './dto/criar-corte.dto';
+import { AtualizarCorteDto } from './dto/atualizar-corte.dto';
 
 @Injectable()
 export class CortesRepository {
@@ -21,11 +22,24 @@ export class CortesRepository {
     });
   }
 
+  listarTodos() {
+    return this.prisma.corte.findMany({
+      select: {
+        id: true,
+        nome: true,
+        imagemUrl: true,
+        precoKg: true,
+        disponivel: true,
+      },
+      orderBy: { nome: 'asc' },
+    });
+  }
+
   criar(dto: CriarCorteDto) {
     return this.prisma.corte.create({
       data: {
         nome: dto.nome,
-        imagemUrl: dto.imagemUrl,
+        imagemUrl: dto.imagemUrl ?? '',
         precoKg: new Prisma.Decimal(dto.precoKg),
         disponivel: dto.disponivel ?? true,
       },
@@ -37,5 +51,30 @@ export class CortesRepository {
         disponivel: true,
       },
     });
+  }
+
+  atualizar(id: string, dto: AtualizarCorteDto) {
+    return this.prisma.corte.update({
+      where: { id },
+      data: {
+        ...(dto.nome !== undefined && { nome: dto.nome }),
+        ...(dto.imagemUrl !== undefined && { imagemUrl: dto.imagemUrl }),
+        ...(dto.precoKg !== undefined && {
+          precoKg: new Prisma.Decimal(dto.precoKg),
+        }),
+        ...(dto.disponivel !== undefined && { disponivel: dto.disponivel }),
+      },
+      select: {
+        id: true,
+        nome: true,
+        imagemUrl: true,
+        precoKg: true,
+        disponivel: true,
+      },
+    });
+  }
+
+  deletar(id: string) {
+    return this.prisma.corte.delete({ where: { id } });
   }
 }

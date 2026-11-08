@@ -41,6 +41,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     );
   }
 
+  if (response.status === 204) return undefined as T;
+
   return response.json() as Promise<T>;
 }
 
@@ -84,6 +86,27 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(corte),
     }),
+  listarCortesGerenciamento: () => request<Corte[]>('/painel/cortes'),
+  criarCorteGerenciamento: (corte: {
+    nome: string;
+    imagemUrl: string;
+    precoKg: string;
+    disponivel: boolean;
+  }) =>
+    request<Corte>('/painel/cortes', {
+      method: 'POST',
+      body: JSON.stringify(corte),
+    }),
+  atualizarCorte: (
+    id: string,
+    corte: Partial<Pick<Corte, 'nome' | 'imagemUrl' | 'precoKg' | 'disponivel'>>,
+  ) =>
+    request<Corte>(`/painel/cortes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(corte),
+    }),
+  deletarCorte: (id: string) =>
+    request<void>(`/painel/cortes/${id}`, { method: 'DELETE' }),
   listarFila: () => request<FilaAtendimento>('/atendimento/fila'),
   obterPainel: () => request<PainelAtendimento>('/atendimento/painel'),
   chamarProxima: () =>

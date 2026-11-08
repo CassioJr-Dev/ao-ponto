@@ -5,9 +5,9 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 
 export class CriarCorteDto {
@@ -21,14 +21,18 @@ export class CriarCorteDto {
   @MaxLength(120)
   nome: string;
 
-  @ApiProperty({
-    description: 'URL completa da imagem do corte.',
+  @ApiPropertyOptional({
+    description: 'URL da imagem do corte. Quando omitida ou vazia, será usado o placeholder do catálogo.',
     example: 'https://example.com/imagens/alcatra.jpg',
   })
+  @IsOptional()
+  @ValidateIf((_obj, value) => value !== '')
   @IsString()
-  @IsUrl({ require_protocol: true, require_tld: false })
+  @Matches(/^(?:https?:\/\/[^\s/?#]+(?:[/?#][^\s]*)?|\/(?!\/)[^\s]*)$/i, {
+    message: 'imagemUrl deve ser uma URL HTTP/HTTPS ou um caminho local iniciado por /.',
+  })
   @MaxLength(2048)
-  imagemUrl: string;
+  imagemUrl?: string;
 
   @ApiProperty({
     description:
