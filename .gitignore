@@ -4,6 +4,9 @@
 /build
 /front-end/dist
 /front-end/node_modules
+/appmobile/node_modules
+/appmobile/.expo
+/appmobile/dist
 
 # Logs
 logs

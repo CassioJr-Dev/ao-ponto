@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "AoPonto",
+    "slug": "ao-ponto-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#bd1018"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#bd1018"
+      },
+      "edgeToEdgeEnabled": true
+    }
+  }
+}
